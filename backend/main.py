@@ -10,6 +10,10 @@ import aiofiles
 from datetime import datetime
 import json
 import mimetypes
+import shutil
+import zipfile
+from pdf_generator import PDFGenerator
+from file_manager import FileManager
 
 app = FastAPI(title="Cuestionario Gestión de Riesgos", version="1.0.0")
 
@@ -25,9 +29,14 @@ app.add_middleware(
 # Crear directorios necesarios
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("static", exist_ok=True)
+os.makedirs("temp", exist_ok=True)
 
 # Servir archivos estáticos
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# Inicializar generadores
+pdf_generator = PDFGenerator()
+file_manager = FileManager()
 
 # Modelos Pydantic
 class PersonalInfo(BaseModel):
@@ -220,6 +229,138 @@ async def get_statistics():
         "lowest_score": min(scores),
         "average_percentage": round(sum(percentages) / len(percentages), 2)
     }
+
+@app.get("/download-pdf/{submission_id}")
+async def download_submission_pdf(submission_id: str):
+    """Descargar PDF con las respuestas de una submisión"""
+    submission = next((s for s in submissions_db if s["id"] == submission_id), None)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submisión no encontrada")
+    
+    try:
+        # Generar PDF
+        personal_info = submission['personal_info']
+        safe_name = file_manager.sanitize_filename(personal_info['nombre_completo'])
+        pdf_filename = f"cuestionario_{safe_name}_{submission_id[:8]}.pdf"
+        pdf_path = os.path.join("temp", pdf_filename)
+        
+        pdf_generator.generate_survey_pdf(submission, pdf_path)
+        
+        if not os.path.exists(pdf_path):
+            raise HTTPException(status_code=500, detail="Error al generar PDF")
+        
+        return FileResponse(
+            path=pdf_path,
+            media_type='application/pdf',
+            filename=pdf_filename,
+            headers={"Content-Disposition": f"attachment; filename={pdf_filename}"}
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al generar PDF: {str(e)}")
+
+@app.get("/download-zip/{submission_id}")
+async def download_submission_zip(submission_id: str):
+    """Descargar ZIP con archivos adjuntos de una submisión"""
+    submission = next((s for s in submissions_db if s["id"] == submission_id), None)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submisión no encontrada")
+    
+    try:
+        # Crear ZIP con archivos adjuntos
+        zip_path = file_manager.create_submission_zip(submission)
+        
+        if not zip_path or not os.path.exists(zip_path):
+            raise HTTPException(status_code=404, detail="No hay archivos adjuntos para descargar")
+        
+        zip_filename = os.path.basename(zip_path)
+        
+        return FileResponse(
+            path=zip_path,
+            media_type='application/zip',
+            filename=zip_filename,
+            headers={"Content-Disposition": f"attachment; filename={zip_filename}"}
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al crear ZIP: {str(e)}")
+
+@app.get("/download-complete/{submission_id}")
+async def download_complete_package(submission_id: str):
+    """Descargar paquete completo: PDF + ZIP de archivos"""
+    submission = next((s for s in submissions_db if s["id"] == submission_id), None)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submisión no encontrada")
+    
+    try:
+        personal_info = submission['personal_info']
+        safe_name = file_manager.sanitize_filename(personal_info['nombre_completo'])
+        
+        # Crear directorio temporal para el paquete completo
+        package_dir = os.path.join("temp", f"paquete_{submission_id[:8]}")
+        os.makedirs(package_dir, exist_ok=True)
+        
+        # Generar PDF
+        pdf_filename = f"cuestionario_{safe_name}.pdf"
+        pdf_path = os.path.join(package_dir, pdf_filename)
+        pdf_generator.generate_survey_pdf(submission, pdf_path)
+        
+        # Crear subdirectorio para archivos adjuntos
+        attachments_dir = os.path.join(package_dir, "archivos_adjuntos")
+        os.makedirs(attachments_dir, exist_ok=True)
+        
+        # Copiar archivos adjuntos
+        file_count = 0
+        for response in submission['responses']:
+            if response.get('file_path') and os.path.exists(response['file_path']):
+                question_id = response['question_id']
+                original_path = response['file_path']
+                original_name = os.path.basename(original_path)
+                _, ext = os.path.splitext(original_name)
+                
+                new_name = f"pregunta_{question_id:02d}_{file_manager.get_question_short_name(question_id)}{ext}"
+                new_path = os.path.join(attachments_dir, new_name)
+                
+                shutil.copy2(original_path, new_path)
+                file_count += 1
+        
+        # Crear archivo ZIP del paquete completo
+        complete_zip_filename = f"paquete_completo_{safe_name}_{submission_id[:8]}.zip"
+        complete_zip_path = os.path.join("temp", complete_zip_filename)
+        
+        with zipfile.ZipFile(complete_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Agregar PDF
+            zipf.write(pdf_path, pdf_filename)
+            
+            # Agregar archivos adjuntos
+            if file_count > 0:
+                for root, dirs, files in os.walk(attachments_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.join("archivos_adjuntos", file)
+                        zipf.write(file_path, arc_name)
+        
+        # Limpiar directorio temporal
+        shutil.rmtree(package_dir)
+        
+        return FileResponse(
+            path=complete_zip_path,
+            media_type='application/zip',
+            filename=complete_zip_filename,
+            headers={"Content-Disposition": f"attachment; filename={complete_zip_filename}"}
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al crear paquete completo: {str(e)}")
+
+@app.delete("/cleanup-temp")
+async def cleanup_temp_files():
+    """Limpiar archivos temporales (endpoint administrativo)"""
+    try:
+        file_manager.cleanup_temp_files()
+        return {"message": "Archivos temporales limpiados exitosamente"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al limpiar archivos: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

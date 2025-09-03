@@ -8,7 +8,7 @@ import { ProgressSummary } from '@/components/ProgressSummary';
 import { useToast } from '@/hooks/use-toast';
 import { surveyApi } from '@/services/api';
 import { PersonalInfo, Question, QuestionResponse, SurveySubmission } from '@/types/survey';
-import { CheckCircle, AlertCircle, Send } from 'lucide-react';
+import { CheckCircle, AlertCircle, Send, FileDown, Archive, Package } from 'lucide-react';
 
 export const SurveyForm: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -194,6 +194,34 @@ export const SurveyForm: React.FC = () => {
               ID de Submisión: <code className="bg-white px-2 py-1 rounded">{submissionResult.submission_id}</code>
             </p>
             
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+              <Button
+                onClick={() => handleDownloadPDF(submissionResult.submission_id)}
+                className="flex-1"
+              >
+                <FileDown className="h-4 w-4 mr-2" />
+                Descargar PDF
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={() => handleDownloadZIP(submissionResult.submission_id)}
+                className="flex-1"
+              >
+                <Archive className="h-4 w-4 mr-2" />
+                Descargar Archivos
+              </Button>
+              
+              <Button
+                variant="secondary"
+                onClick={() => handleDownloadComplete(submissionResult.submission_id)}
+                className="flex-1"
+              >
+                <Package className="h-4 w-4 mr-2" />
+                Paquete Completo
+              </Button>
+            </div>
+            
             <Button 
               onClick={() => window.location.reload()} 
               variant="outline"
@@ -209,6 +237,75 @@ export const SurveyForm: React.FC = () => {
 
   const progress = calculateProgress();
   const { current: currentScore, max: maxScore } = calculateTotalScore();
+
+  const downloadFile = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
+  const handleDownloadPDF = async (submissionId: string) => {
+    try {
+      const blob = await surveyApi.downloadPDF(submissionId);
+      const filename = `cuestionario_${personalInfo.nombre_completo.replace(/\s+/g, '_')}_${submissionId.substring(0, 8)}.pdf`;
+      downloadFile(blob, filename);
+      
+      toast({
+        title: "Descarga exitosa",
+        description: "PDF descargado correctamente"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.detail || "Error al descargar PDF",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDownloadZIP = async (submissionId: string) => {
+    try {
+      const blob = await surveyApi.downloadZIP(submissionId);
+      const filename = `archivos_${personalInfo.nombre_completo.replace(/\s+/g, '_')}_${submissionId.substring(0, 8)}.zip`;
+      downloadFile(blob, filename);
+      
+      toast({
+        title: "Descarga exitosa",
+        description: "Archivos ZIP descargados correctamente"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.detail || "Error al descargar archivos",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDownloadComplete = async (submissionId: string) => {
+    try {
+      const blob = await surveyApi.downloadComplete(submissionId);
+      const filename = `paquete_completo_${personalInfo.nombre_completo.replace(/\s+/g, '_')}_${submissionId.substring(0, 8)}.zip`;
+      downloadFile(blob, filename);
+      
+      toast({
+        title: "Descarga exitosa",
+        description: "Paquete completo descargado correctamente"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.detail || "Error al descargar paquete completo",
+        variant: "destructive"
+      });
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">

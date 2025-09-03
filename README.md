@@ -11,6 +11,10 @@ Una aplicación web completa para evaluar la preparación de entidades de salud 
 - **Validación completa**: Validación tanto en frontend como backend
 - **UI responsiva**: Diseño adaptable para móviles y desktop
 - **Progreso visual**: Barra de progreso y indicadores de completitud
+- **📄 Generación de PDF**: Reportes profesionales con todas las respuestas
+- **📦 Descarga de archivos**: ZIP organizados con documentos adjuntos
+- **🎁 Paquete completo**: PDF + archivos en un solo ZIP
+- **👨‍💼 Dashboard admin**: Vista administrativa con descargas y estadísticas
 
 ## 📋 Funcionalidades del Cuestionario
 
@@ -157,6 +161,11 @@ npm run dev
 - `POST /submit-survey` - Enviar cuestionario completo
 - `GET /submissions` - Ver todas las submisiones
 - `GET /submissions/{id}` - Ver submisión específica
+- `GET /download-pdf/{id}` - 📄 Descargar PDF del cuestionario
+- `GET /download-zip/{id}` - 📦 Descargar ZIP con archivos adjuntos
+- `GET /download-complete/{id}` - 🎁 Descargar paquete completo
+- `GET /stats` - Obtener estadísticas generales
+- `DELETE /cleanup-temp` - Limpiar archivos temporales
 
 ### Tipos de Archivo Soportados
 - **Documentos**: PDF, DOC, DOCX, TXT

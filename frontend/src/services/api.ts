@@ -48,6 +48,36 @@ export const surveyApi = {
     const response = await api.get(`/submissions/${submissionId}`);
     return response.data;
   },
+
+  // Descargar PDF de una submisión
+  downloadPDF: async (submissionId: string): Promise<Blob> => {
+    const response = await api.get(`/download-pdf/${submissionId}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  // Descargar ZIP con archivos adjuntos
+  downloadZIP: async (submissionId: string): Promise<Blob> => {
+    const response = await api.get(`/download-zip/${submissionId}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  // Descargar paquete completo (PDF + archivos)
+  downloadComplete: async (submissionId: string): Promise<Blob> => {
+    const response = await api.get(`/download-complete/${submissionId}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  // Obtener estadísticas
+  getStatistics: async (): Promise<any> => {
+    const response = await api.get('/stats');
+    return response.data;
+  },
 };
 
 export default api;

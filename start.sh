@@ -37,6 +37,7 @@ if [ ! -d "backend/venv" ]; then
     python3 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
+    pip install reportlab jinja2  # Dependencias para PDF y templates
     cd ..
 fi
 
